@@ -4,13 +4,13 @@
   },
   "environments": {
     "dev": {
-      "s3_bucket": "dev-crud-artifacts-bucket"
+      "s3_bucket": "jsvm-artifacts"
     },
     "test": {
-      "s3_bucket": "test-crud-artifacts-bucket"
+      "s3_bucket": "jsvm-artifacts"
     },
     "prod": {
-      "s3_bucket": "prod-crud-artifacts-bucket"
+      "s3_bucket": "prod-jsvm-artifacts"
     }
   }
 }
