@@ -1,7 +1,16 @@
 {
-  "default_region": "us-west-2",
   "service": {
     "name": "doctor"
   },
-   "s3_bucket": "jsvm-artifacts"
+  "environments": {
+    "dev": {
+      "s3_bucket": "dev-crud-artifacts-bucket"
+    },
+    "test": {
+      "s3_bucket": "test-crud-artifacts-bucket"
+    },
+    "prod": {
+      "s3_bucket": "prod-crud-artifacts-bucket"
+    }
+  }
 }
