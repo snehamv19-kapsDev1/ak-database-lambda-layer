@@ -15,7 +15,7 @@ Resources:
   CrudLambdaRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: crud-lambda-role
+      RoleName: jsvm-database-s3-role
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:

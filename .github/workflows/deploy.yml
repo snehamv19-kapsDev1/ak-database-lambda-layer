@@ -109,6 +109,6 @@ jobs:
         run: |
           aws cloudformation deploy \
             --template-file infra/service-infra-cft.yaml \
-            --stack-name crud-${ENV} \
+            --stack-name jsvm-database-${ENV}-${SERVICE_NAME} \
             --capabilities CAPABILITY_NAMED_IAM \
-            --parameter-overrides BucketName=$BUCKET
+            --parameter-overrides BucketName=$BUCKET/$ENV
