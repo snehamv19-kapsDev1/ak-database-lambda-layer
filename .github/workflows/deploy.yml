@@ -60,27 +60,26 @@ jobs:
       - name: Load config
         run: |
           set -e
-
+      
           SERVICE_NAME=$(jq -r ".service.name" config/env-config.json)
-          BUCKET=$(jq -r "$Es3_bucket" config/env-config.json)
-
+          BUCKET=$(jq -r ".environments[\"$ENV\"].s3_bucket" config/env-config.json)
+      
           echo "SERVICE_NAME=$SERVICE_NAME"
           echo "BUCKET=$BUCKET"
-
+      
           # 🔥 FAIL FAST IF CONFIG IS BROKEN
           if [ -z "$SERVICE_NAME" ] || [ "$SERVICE_NAME" == "null" ]; then
             echo "❌ SERVICE_NAME missing in config"
             exit 1
           fi
-
+      
           if [ -z "$BUCKET" ] || [ "$BUCKET" == "null" ]; then
             echo "❌ BUCKET missing for ENV=$ENV"
             exit 1
           fi
-
+      
           echo "SERVICE_NAME=$SERVICE_NAME" >> $GITHUB_ENV
           echo "BUCKET=$BUCKET" >> $GITHUB_ENV
-
       # ----------------------
       # BUILD LAMBDA
       # ----------------------
