@@ -100,7 +100,7 @@ jobs:
 
           aws s3 cp \
             build/${SERVICE_NAME}-db-artifact.zip \
-            s3://$BUCKET/database/${SERVICE_NAME}-db-artifact.zip
+            s3://$BUCKET/$ENV/${SERVICE_NAME}-db-artifact.zip
 
       # ----------------------
       # DEPLOY CFN
