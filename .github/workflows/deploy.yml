@@ -25,6 +25,15 @@ jobs:
           fi
 
       # ----------------------
+      # DEBUG (SAFEGUARD)
+      # ----------------------
+      - name: Debug environment
+        run: |
+          echo "Branch: $GITHUB_REF_NAME"
+          echo "ENV: $ENV"
+          cat config/env-config.json
+
+      # ----------------------
       # AWS AUTH
       # ----------------------
       - name: Configure AWS
@@ -35,12 +44,28 @@ jobs:
           aws-region: us-west-2
 
       # ----------------------
-      # LOAD CONFIG (SERVICE NAME + BUCKET)
+      # LOAD CONFIG (FIXED + SAFE)
       # ----------------------
       - name: Load config
         run: |
+          set -e
+
           SERVICE_NAME=$(jq -r ".service.name" config/env-config.json)
-          BUCKET=$(jq -r ".environments.${ENV}.s3_bucket" config/env-config.json)
+          BUCKET=$(jq -r ".environments[\"$ENV\"].s3_bucket" config/env-config.json)
+
+          echo "SERVICE_NAME=$SERVICE_NAME"
+          echo "BUCKET=$BUCKET"
+
+          # 🔥 FAIL FAST IF CONFIG IS BROKEN
+          if [ -z "$SERVICE_NAME" ] || [ "$SERVICE_NAME" == "null" ]; then
+            echo "❌ SERVICE_NAME missing in config"
+            exit 1
+          fi
+
+          if [ -z "$BUCKET" ] || [ "$BUCKET" == "null" ]; then
+            echo "❌ BUCKET missing for ENV=$ENV"
+            exit 1
+          fi
 
           echo "SERVICE_NAME=$SERVICE_NAME" >> $GITHUB_ENV
           echo "BUCKET=$BUCKET" >> $GITHUB_ENV
@@ -57,10 +82,12 @@ jobs:
           cd ..
 
       # ----------------------
-      # UPLOAD TO S3
+      # UPLOAD TO S3 (FIXED PATH SAFETY)
       # ----------------------
       - name: Upload Lambda
         run: |
+          echo "Uploading to bucket: $BUCKET"
+
           aws s3 cp \
             build/${SERVICE_NAME}-db-artifact.zip \
             s3://$BUCKET/${ENV}-jsvm-service/${SERVICE_NAME}-db.zip
