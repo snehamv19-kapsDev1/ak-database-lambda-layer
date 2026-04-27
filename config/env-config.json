@@ -3,5 +3,5 @@
   "service": {
     "name": "doctor"
   },
-   "s3_bucket": "jsvm-database-artifacts"
+   "s3_bucket": "jsvm-artifacts"
 }
