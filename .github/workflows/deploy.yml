@@ -16,14 +16,25 @@ jobs:
       # ----------------------
       - name: Set environment
         run: |
-          if [[ "${GITHUB_REF_NAME}" == "main" ]]; then
-            echo "ENV=prod" >> $GITHUB_ENV
-          elif [[ "${GITHUB_REF_NAME}" == "test" ]]; then
-            echo "ENV=test" >> $GITHUB_ENV
-          else
-            echo "ENV=dev" >> $GITHUB_ENV
-          fi
-
+          case "${GITHUB_REF_NAME}" in
+            main)
+              ENV=prod
+              ;;
+            test)
+              ENV=test
+              ;;
+            dev)
+              ENV=dev
+              ;;
+            *)
+              echo "❌ Invalid branch: ${GITHUB_REF_NAME}"
+              echo "Allowed branches: dev | test | main"
+              exit 1
+              ;;
+          esac
+      
+          echo "ENV=$ENV" >> $GITHUB_ENV
+          echo "✅ Selected environment: $ENV"
       # ----------------------
       # DEBUG (SAFEGUARD)
       # ----------------------
@@ -51,7 +62,7 @@ jobs:
           set -e
 
           SERVICE_NAME=$(jq -r ".service.name" config/env-config.json)
-          BUCKET=$(jq -r ".environments[\"$ENV\"].s3_bucket" config/env-config.json)
+          BUCKET=$(jq -r "$Es3_bucket" config/env-config.json)
 
           echo "SERVICE_NAME=$SERVICE_NAME"
           echo "BUCKET=$BUCKET"
