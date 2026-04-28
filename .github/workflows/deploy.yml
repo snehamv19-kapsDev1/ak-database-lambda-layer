@@ -17,28 +17,22 @@ jobs:
       - name: Set environment
         run: |
           case "${GITHUB_REF_NAME}" in
-            main)
-              ENV=prod
-              ;;
-            test)
-              ENV=test
-              ;;
-            dev)
-              ENV=dev
-              ;;
+            main) ENV=prod ;;
+            test) ENV=test ;;
+            dev)  ENV=dev  ;;
             *)
               echo "❌ Invalid branch: ${GITHUB_REF_NAME}"
-              echo "Allowed branches: dev | test | main"
               exit 1
               ;;
           esac
-      
+
           echo "ENV=$ENV" >> $GITHUB_ENV
-          echo "✅ Selected environment: $ENV"
+          echo "✅ ENV=$ENV"
+
       # ----------------------
-      # DEBUG (SAFEGUARD)
+      # DEBUG
       # ----------------------
-      - name: Debug environment
+      - name: Debug
         run: |
           echo "Branch: $GITHUB_REF_NAME"
           echo "ENV: $ENV"
@@ -55,31 +49,31 @@ jobs:
           aws-region: us-west-2
 
       # ----------------------
-      # LOAD CONFIG (FIXED + SAFE)
+      # LOAD CONFIG
       # ----------------------
       - name: Load config
         run: |
           set -e
-      
+
           SERVICE_NAME=$(jq -r ".service.name" config/env-config.json)
           BUCKET=$(jq -r ".environments[\"$ENV\"].s3_bucket" config/env-config.json)
-      
-          echo "SERVICE_NAME=$SERVICE_NAME"
-          echo "BUCKET=$BUCKET"
-      
-          # 🔥 FAIL FAST IF CONFIG IS BROKEN
+
           if [ -z "$SERVICE_NAME" ] || [ "$SERVICE_NAME" == "null" ]; then
-            echo "❌ SERVICE_NAME missing in config"
+            echo "❌ SERVICE_NAME missing"
             exit 1
           fi
-      
+
           if [ -z "$BUCKET" ] || [ "$BUCKET" == "null" ]; then
             echo "❌ BUCKET missing for ENV=$ENV"
             exit 1
           fi
-      
+
           echo "SERVICE_NAME=$SERVICE_NAME" >> $GITHUB_ENV
           echo "BUCKET=$BUCKET" >> $GITHUB_ENV
+
+          echo "✅ SERVICE_NAME=$SERVICE_NAME"
+          echo "✅ BUCKET=$BUCKET"
+
       # ----------------------
       # BUILD LAMBDA
       # ----------------------
@@ -87,20 +81,24 @@ jobs:
         run: |
           mkdir -p build
 
-          cd lambdas/
-          zip -r ../build/${SERVICE_NAME}-db-artifact.zip . > /dev/null          
+          cd lambdas
+          zip -r ../build/${SERVICE_NAME}-db-artifact.zip . > /dev/null
           cd ..
 
       # ----------------------
-      # UPLOAD TO S3 (FIXED PATH SAFETY)
+      # UPLOAD TO S3
       # ----------------------
       - name: Upload Lambda
         run: |
-          echo "Uploading to bucket: $BUCKET"
+          CODE_KEY="$ENV/${SERVICE_NAME}-db-artifact.zip"
+
+          echo "Uploading to s3://$BUCKET/$CODE_KEY"
 
           aws s3 cp \
             build/${SERVICE_NAME}-db-artifact.zip \
-            s3://$BUCKET/$ENV/${SERVICE_NAME}-db-artifact.zip
+            s3://$BUCKET/$CODE_KEY
+
+          echo "CODE_KEY=$CODE_KEY" >> $GITHUB_ENV
 
       # ----------------------
       # DEPLOY CFN
@@ -112,6 +110,38 @@ jobs:
             --stack-name jsvm-database-${ENV}-${SERVICE_NAME} \
             --capabilities CAPABILITY_NAMED_IAM \
             --parameter-overrides \
-              BucketName=$BUCKET\$ENV \
               ServiceName=${SERVICE_NAME} \
-              Environment=$ENV
+              Environment=${ENV} \
+              CodeBucket=${BUCKET} \
+              CodeKey=${CODE_KEY}
+
+      # ----------------------
+      # OUTPUT API URL
+      # ----------------------
+      - name: Get API URL
+        run: |
+          API_URL=$(aws cloudformation describe-stacks \
+            --stack-name jsvm-database-${ENV}-${SERVICE_NAME} \
+            --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" \
+            --output text)
+
+          echo "🚀 API URL: $API_URL"
+
+      - name: Publish Stack Outputs
+        run: |
+          STACK_NAME="jsvm-database-${ENV}-${SERVICE_NAME}"
+
+          OUTPUTS=$(aws cloudformation describe-stacks \
+            --stack-name $STACK_NAME \
+            --query "Stacks[0].Outputs" \
+            --output json)
+
+          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** $ENV" >> $GITHUB_STEP_SUMMARY
+          echo "**Service:** $SERVICE_NAME" >> $GITHUB_STEP_SUMMARY
+          echo "**Stack:** $STACK_NAME" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Outputs" >> $GITHUB_STEP_SUMMARY
+
+          echo "$OUTPUTS" | jq -r '.[] | "- \(.OutputKey): \(.OutputValue)"' >> $GITHUB_STEP_SUMMARY

@@ -1,30 +1,29 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: S3 DB Service  (Single Bucket + Prefix Strategy)
+Description: S3 JSON DB CRUD Service (API + Lambda)
 
 Parameters:
-  BucketName:
-    Type: String
-
   Environment:
     Type: String
-    AllowedValues:
-      - dev
-      - test
-      - prod
+    AllowedValues: [dev, test, prod]
 
   ServiceName:
     Type: String
 
+  CodeBucket:
+    Type: String
+
+  CodeKey:
+    Type: String
+
 Resources:
 
-  ########################################
-  # IAM ROLE FOR LAMBDA
-  ########################################
-  DBServiceLambdaRole:
+########################################
+# IAM ROLE
+########################################
+  LambdaRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "${ServiceName}-lambda-role-${Environment}"
-
+      RoleName: !Sub "${Environment}-${ServiceName}-lambda-role"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -34,45 +33,151 @@ Resources:
             Action: sts:AssumeRole
 
       Policies:
-
-        ########################################
-        # S3 ACCESS (PREFIX-SCOPED 🔥)
-        ########################################
-        - PolicyName: S3PrefixAccess
+        - PolicyName: S3Access
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
-
-              # Allow access ONLY inside env/service prefix
               - Effect: Allow
                 Action:
                   - s3:GetObject
                   - s3:PutObject
-                Resource: !Sub "arn:aws:s3:::${BucketName}/${Environment}/${ServiceName}/*"
+                  - s3:DeleteObject
+                Resource: !Sub >
+                  arn:aws:s3:::jsvm-database/${Environment}-jsvm-database/${Environment}-${ServiceName}-table/*
 
-              # Allow listing ONLY that prefix
               - Effect: Allow
                 Action:
                   - s3:ListBucket
-                Resource: !Sub "arn:aws:s3:::${BucketName}"
+                Resource: arn:aws:s3:::jsvm-database
                 Condition:
                   StringLike:
-                    s3:prefix: !Sub "${Environment}/${ServiceName}/*"
+                    s3:prefix: !Sub "${Environment}-jsvm-database/${Environment}-${ServiceName}-table/*"
 
-        ########################################
-        # CLOUDWATCH LOGS
-        ########################################
-        - PolicyName: CloudWatchLogs
+        - PolicyName: Logs
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
+                  - logs:*
                 Resource: "*"
 
+########################################
+# LAMBDA
+########################################
+  CrudFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${Environment}-${ServiceName}-function"
+      Runtime: python3.11
+      Handler: lambda_handler.lambda_handler
+      Role: !GetAtt LambdaRole.Arn
+      Timeout: 15
+
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: !Ref CodeKey
+
+      Environment:
+        Variables:
+          ENV: !Ref Environment
+          SERVICE: !Ref ServiceName
+          BUCKET: jsvm-database
+
+########################################
+# API GATEWAY
+########################################
+  Api:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub "${Environment}-${ServiceName}-api"
+
+  ResourceItem:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref Api
+      ParentId: !GetAtt Api.RootResourceId
+      PathPart: item
+
+  ResourceItemId:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref Api
+      ParentId: !Ref ResourceItem
+      PathPart: "{id}"
+
+  ResourceItems:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref Api
+      ParentId: !GetAtt Api.RootResourceId
+      PathPart: items
+
+########################################
+# METHODS
+########################################
+  AnyItemMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref Api
+      ResourceId: !Ref ResourceItemId
+      HttpMethod: ANY
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub >
+          arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CrudFunction.Arn}/invocations
+
+  PostItemMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref Api
+      ResourceId: !Ref ResourceItem
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub >
+          arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CrudFunction.Arn}/invocations
+
+  AnyItemsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref Api
+      ResourceId: !Ref ResourceItems
+      HttpMethod: ANY
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub >
+          arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CrudFunction.Arn}/invocations
+
+########################################
+# PERMISSION
+########################################
+  LambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref CrudFunction
+      Principal: apigateway.amazonaws.com
+
+########################################
+# DEPLOYMENT
+########################################
+  Deployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - AnyItemMethod
+      - PostItemMethod
+      - AnyItemsMethod
+    Properties:
+      RestApiId: !Ref Api
+      StageName: prod
+
 Outputs:
-  LambdaRoleArn:
-    Value: !GetAtt DBServiceLambdaRole.Arn
+  ApiUrl:
+    Value: !Sub "https://${Api}.execute-api.${AWS::Region}.amazonaws.com/prod"
