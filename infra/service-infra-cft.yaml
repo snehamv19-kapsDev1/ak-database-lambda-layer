@@ -241,7 +241,7 @@ Resources:
       - BatchCreate
     Properties:
       RestApiId: !Ref Api
-      Description: !Sub "${AWS::StackName}-${AWS::Timestamp}"
+      Description: !Sub "${AWS::StackName}"
 
   Stage:
     Type: AWS::ApiGateway::Stage
