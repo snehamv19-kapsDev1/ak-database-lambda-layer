@@ -15,16 +15,15 @@ Parameters:
   CodeKey:
     Type: String
 
+Resources:
+
 # =========================================================
 # IAM ROLE (LAMBDA)
 # =========================================================
-Resources:
-
   LambdaRole:
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Sub "${Environment}-${ServiceName}-lambda-role"
-
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -40,33 +39,25 @@ Resources:
             Statement:
               - Effect: Allow
                 Action:
-                  - s3:GetObject
-                  - s3:PutObject
-                  - s3:DeleteObject
-                  - s3:ListBucket
-                Resource:
-                  - arn:aws:s3:::jsvm-database
-                  - arn:aws:s3:::jsvm-database/*
+                  - s3:*
+                Resource: "*"
 
-        - PolicyName: CloudWatchLogs
+        - PolicyName: Logs
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
+                  - logs:*
                 Resource: "*"
 
 # =========================================================
-# LAMBDA FUNCTION
+# LAMBDA
 # =========================================================
   CrudFunction:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: !Sub "${Environment}-${ServiceName}-crud"
-
       Runtime: python3.11
       Handler: lambda_handler.lambda_handler
       Role: !GetAtt LambdaRole.Arn
@@ -91,23 +82,23 @@ Resources:
       Name: !Sub "${Environment}-${ServiceName}-api"
 
 # =========================================================
-# API RESOURCES
+# RESOURCES
 # =========================================================
-  ItemResource:
+  Item:
     Type: AWS::ApiGateway::Resource
     Properties:
       RestApiId: !Ref Api
       ParentId: !GetAtt Api.RootResourceId
       PathPart: item
 
-  ItemIdResource:
+  ItemId:
     Type: AWS::ApiGateway::Resource
     Properties:
       RestApiId: !Ref Api
-      ParentId: !Ref ItemResource
+      ParentId: !Ref Item
       PathPart: "{id}"
 
-  ItemsResource:
+  Items:
     Type: AWS::ApiGateway::Resource
     Properties:
       RestApiId: !Ref Api
@@ -115,13 +106,13 @@ Resources:
       PathPart: items
 
 # =========================================================
-# API METHODS (LAMBDA PROXY)
+# METHODS
 # =========================================================
   CreateItem:
     Type: AWS::ApiGateway::Method
     Properties:
       RestApiId: !Ref Api
-      ResourceId: !Ref ItemResource
+      ResourceId: !Ref Item
       HttpMethod: POST
       AuthorizationType: NONE
       Integration:
@@ -133,7 +124,7 @@ Resources:
     Type: AWS::ApiGateway::Method
     Properties:
       RestApiId: !Ref Api
-      ResourceId: !Ref ItemIdResource
+      ResourceId: !Ref ItemId
       HttpMethod: GET
       AuthorizationType: NONE
       Integration:
@@ -145,7 +136,7 @@ Resources:
     Type: AWS::ApiGateway::Method
     Properties:
       RestApiId: !Ref Api
-      ResourceId: !Ref ItemIdResource
+      ResourceId: !Ref ItemId
       HttpMethod: PUT
       AuthorizationType: NONE
       Integration:
@@ -157,7 +148,7 @@ Resources:
     Type: AWS::ApiGateway::Method
     Properties:
       RestApiId: !Ref Api
-      ResourceId: !Ref ItemIdResource
+      ResourceId: !Ref ItemId
       HttpMethod: DELETE
       AuthorizationType: NONE
       Integration:
@@ -169,7 +160,7 @@ Resources:
     Type: AWS::ApiGateway::Method
     Properties:
       RestApiId: !Ref Api
-      ResourceId: !Ref ItemsResource
+      ResourceId: !Ref Items
       HttpMethod: GET
       AuthorizationType: NONE
       Integration:
@@ -177,11 +168,11 @@ Resources:
         IntegrationHttpMethod: POST
         Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CrudFunction.Arn}/invocations
 
-  BatchCreateItems:
+  BatchCreate:
     Type: AWS::ApiGateway::Method
     Properties:
       RestApiId: !Ref Api
-      ResourceId: !Ref ItemsResource
+      ResourceId: !Ref Items
       HttpMethod: POST
       AuthorizationType: NONE
       Integration:
@@ -190,7 +181,7 @@ Resources:
         Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CrudFunction.Arn}/invocations
 
 # =========================================================
-# LAMBDA PERMISSION
+# PERMISSION
 # =========================================================
   LambdaPermission:
     Type: AWS::Lambda::Permission
@@ -198,14 +189,14 @@ Resources:
       Action: lambda:InvokeFunction
       FunctionName: !Ref CrudFunction
       Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${Api}/*/*/*
 
 # =========================================================
-# CLOUDWATCH LOGGING (API GATEWAY)
+# API GW LOGGING
 # =========================================================
-  ApiGatewayCloudWatchRole:
+  ApiGatewayRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "${Environment}-${ServiceName}-apigw-role"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -213,28 +204,22 @@ Resources:
             Principal:
               Service: apigateway.amazonaws.com
             Action: sts:AssumeRole
-
       Policies:
         - PolicyName: ApiGwLogs
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
               - Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                  - logs:DescribeLogGroups
-                  - logs:DescribeLogStreams
+                Action: logs:*
                 Resource: "*"
 
-  ApiGatewayAccount:
+  ApiAccount:
     Type: AWS::ApiGateway::Account
     Properties:
-      CloudWatchRoleArn: !GetAtt ApiGatewayCloudWatchRole.Arn
+      CloudWatchRoleArn: !GetAtt ApiGatewayRole.Arn
 
 # =========================================================
-# LAMBDA LOG GROUP
+# LOG GROUP
 # =========================================================
   LambdaLogGroup:
     Type: AWS::Logs::LogGroup
@@ -243,7 +228,7 @@ Resources:
       RetentionInDays: 7
 
 # =========================================================
-# DEPLOYMENT + STAGE
+# DEPLOYMENT
 # =========================================================
   Deployment:
     Type: AWS::ApiGateway::Deployment
@@ -253,9 +238,10 @@ Resources:
       - UpdateItem
       - DeleteItem
       - GetItems
-      - BatchCreateItems
+      - BatchCreate
     Properties:
       RestApiId: !Ref Api
+      Description: !Sub "${AWS::StackName}-${AWS::Timestamp}"
 
   Stage:
     Type: AWS::ApiGateway::Stage
@@ -263,17 +249,16 @@ Resources:
       StageName: prod
       RestApiId: !Ref Api
       DeploymentId: !Ref Deployment
-
       MethodSettings:
         - ResourcePath: "/*"
           HttpMethod: "*"
           LoggingLevel: INFO
-          DataTraceEnabled: true
           MetricsEnabled: true
+          DataTraceEnabled: true
 
 # =========================================================
 # OUTPUT
 # =========================================================
 Outputs:
   ApiUrl:
-    Value: !Sub "https://${Api}.execute-api.${AWS::Region}.amazonaws.com/prod"
+    Value: !Sub "https://${Api}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
