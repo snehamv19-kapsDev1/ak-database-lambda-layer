@@ -49,30 +49,42 @@ jobs:
           aws-region: us-west-2
 
       # ----------------------
-      # LOAD CONFIG
+      # LOAD CONFIG from SSM
       # ----------------------
-      - name: Load config
+#      - name: Load config
+#        run: |
+#          set -e
+#
+#          SERVICE_NAME=$(jq -r ".service.name" config/env-config.json)
+#          BUCKET=$(jq -r ".environments[\"$ENV\"].s3_bucket" config/env-config.json)
+#
+#          if [ -z "$SERVICE_NAME" ] || [ "$SERVICE_NAME" == "null" ]; then
+#            echo "❌ SERVICE_NAME missing"
+#            exit 1
+#          fi
+#
+#          if [ -z "$BUCKET" ] || [ "$BUCKET" == "null" ]; then
+#            echo "❌ BUCKET missing for ENV=$ENV"
+#            exit 1
+#          fi
+#
+#          echo "SERVICE_NAME=$SERVICE_NAME" >> $GITHUB_ENV
+#          echo "BUCKET=$BUCKET" >> $GITHUB_ENV
+#
+#          echo "✅ SERVICE_NAME=$SERVICE_NAME"
+#          echo "✅ BUCKET=$BUCKET"
+
+      - name: Load Infra Config from SSM
         run: |
-          set -e
-
-          SERVICE_NAME=$(jq -r ".service.name" config/env-config.json)
-          BUCKET=$(jq -r ".environments[\"$ENV\"].s3_bucket" config/env-config.json)
-
-          if [ -z "$SERVICE_NAME" ] || [ "$SERVICE_NAME" == "null" ]; then
-            echo "❌ SERVICE_NAME missing"
-            exit 1
-          fi
-
-          if [ -z "$BUCKET" ] || [ "$BUCKET" == "null" ]; then
-            echo "❌ BUCKET missing for ENV=$ENV"
-            exit 1
-          fi
-
-          echo "SERVICE_NAME=$SERVICE_NAME" >> $GITHUB_ENV
-          echo "BUCKET=$BUCKET" >> $GITHUB_ENV
-
+          BUCKET=$(aws ssm get-parameter \
+            --name "/jsvm/${ENV}/code-bucket" \
+            --query "Parameter.Value" \
+            --output text)
+          
+          SERVICE_NAME=$(echo "${GITHUB_REPOSITORY}" | cut -d'/' -f2)
           echo "✅ SERVICE_NAME=$SERVICE_NAME"
-          echo "✅ BUCKET=$BUCKET"
+          echo "BUCKET=$BUCKET" >> $GITHUB_ENV
+    
 
       # ----------------------
       # BUILD LAMBDA
@@ -82,32 +94,41 @@ jobs:
           mkdir -p build
 
           cd lambdas
-          zip -r ../build/${SERVICE_NAME}-db-artifact.zip . > /dev/null
+          zip -r ../build/${SERVICE_NAME}-artifact.zip . > /dev/null
           cd ..
 
       # ----------------------
       # UPLOAD TO S3
       # ----------------------
-      - name: Upload Lambda
+#      - name: Upload Lambda
+#        run: |
+#          CODE_KEY="$ENV/${SERVICE_NAME}-db-artifact.zip"
+#
+#          echo "Uploading to s3://$BUCKET/$CODE_KEY"
+#
+#          aws s3 cp \
+#            build/${SERVICE_NAME}-db-artifact.zip \
+#            s3://$BUCKET/$CODE_KEY
+#
+#          echo "CODE_KEY=$CODE_KEY" >> $GITHUB_ENV
+
+      - name: Upload Lambda Zip
         run: |
-          CODE_KEY="$ENV/${SERVICE_NAME}-db-artifact.zip"
-
-          echo "Uploading to s3://$BUCKET/$CODE_KEY"
-
-          aws s3 cp \
-            build/${SERVICE_NAME}-db-artifact.zip \
-            s3://$BUCKET/$CODE_KEY
-
-          echo "CODE_KEY=$CODE_KEY" >> $GITHUB_ENV
+          ZIP_KEY="${ENV}/${SERVICE_NAME}-artifact.zip"
+      
+          aws s3 cp build/${SERVICE_NAME}-artifact.zip s3://$BUCKET/$ZIP_KEY
+      
+          echo "CODE_KEY=$ZIP_KEY" >> $GITHUB_ENV
+    
 
       # ----------------------
       # DEPLOY CFN
       # ----------------------
-      - name: Deploy Infra
+      - name: Deploy Service
         run: |
           aws cloudformation deploy \
             --template-file infra/service-infra-cft.yaml \
-            --stack-name jsvm-database-${ENV}-${SERVICE_NAME} \
+            --stack-name jsvm-${ENV}-${SERVICE_NAME} \
             --capabilities CAPABILITY_NAMED_IAM \
             --parameter-overrides \
               ServiceName=${SERVICE_NAME} \
