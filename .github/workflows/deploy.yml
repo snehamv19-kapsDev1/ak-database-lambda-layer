@@ -47,15 +47,14 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-west-2
 
-      # ----------------------
-      # SET SERVICE_NAME from GITHUB_REPOSITORY name
+     # ----------------------
+      # SET SERVICE NAME (FIXED)
       # ----------------------
       - name: Set Service Name
         run: |
-#          SERVICE_NAME=$(echo "${GITHUB_REPOSITORY}" | cut -d'/' -f2)
-          SERVICE_NAME= jsvm-database-service       
+          SERVICE_NAME=$(echo "${GITHUB_REPOSITORY}" | cut -d'/' -f2)
           echo "SERVICE_NAME=$SERVICE_NAME" >> $GITHUB_ENV
-    
+          echo "✅ SERVICE_NAME=$SERVICE_NAME"
 
       # ----------------------
       # LOAD CONFIG from SSM
