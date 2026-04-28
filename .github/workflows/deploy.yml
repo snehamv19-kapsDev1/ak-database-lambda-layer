@@ -113,5 +113,5 @@ jobs:
             --capabilities CAPABILITY_NAMED_IAM \
             --parameter-overrides \
               BucketName=$BUCKET\$ENV \
-              ServiceName=${SERVICE_NAME}
+              ServiceName=${SERVICE_NAME} \
               Environment=$ENV
