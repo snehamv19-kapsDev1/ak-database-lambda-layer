@@ -25,7 +25,6 @@ def create_item(item):
     )
     return {"message": "Created", "id": item_id}
 
-
 def get_item(item_id):
     key = f"{PREFIX}/{item_id}.json"
 

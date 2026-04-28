@@ -8,77 +8,105 @@ from db_service import (
     batch_create_items
 )
 
-
-def lambda_handler(event, context):
-    method = event.get("httpMethod")
-    resource = event.get("resource")
-    path_params = event.get("pathParameters") or {}
-    item_id = path_params.get("id")
-
+########################################
+# SAFE JSON PARSER
+########################################
+def parse_body(event):
     try:
-        if resource == "/items" and method == "GET":
-            return response(200, get_all_items())
-
-        if resource == "/items" and method == "POST":
-            body = json.loads(event["body"])
-            return response(200, batch_create_items(body))
-
-        if method == "POST":
-            body = json.loads(event["body"])
-            return response(200, create_item(body))
-
-        if method == "GET":
-            return response(200, get_item(item_id))
-
-        if method == "PUT":
-            body = json.loads(event["body"])
-            return response(200, update_item(item_id, body))
-
-        if method == "DELETE":
-            return response(200, delete_item(item_id))
-
-        return response(400, {"error": "Unsupported route"})
-
-    except Exception as e:
-        return response(500, {"error": str(e)})
+        return json.loads(event.get("body") or "{}")
+    except Exception:
+        return {}
 
 
-def response(code, body):
+########################################
+# RESPONSE WRAPPER
+########################################
+def response(status_code, body):
     return {
-        "statusCode": code,
-        "headers": {"Content-Type": "application/json"},
+        "statusCode": status_code,
+        "headers": {
+            "Content-Type": "application/json"
+        },
         "body": json.dumps(body)
     }
 
 
-# import json
-# from service import CrudService
-#
-# service = CrudService()
-#
-# def handler(event, context):
-#     print("in handler EVENT:", event)
-#
-#     method = event.get("httpMethod")
-#     body = json.loads(event.get("body", "{}"))
-#     params = event.get("queryStringParameters") or {}
-#
-#     table = params.get("table", "doctor")
-#     env = params.get("env", "dev")
-#
-#     if method == "POST":
-#         return service.create(env, table, body)
-#
-#     if method == "GET":
-#         return service.read(env, table, params)
-#
-#     if method == "PUT":
-#         return service.update(env, table, body)
-#
-#     if method == "DELETE":
-#         return service.delete(env, table, params)
-#
-#     return {
-#         "statusCode": 400,
-#         "body": json.dumps({"message": "Unsupported method"})
-#     }
+########################################
+# LAMBDA HANDLER
+########################################
+def lambda_handler(event, context):
+
+    print("EVENT:", json.dumps(event))
+
+    method = event.get("httpMethod", "")
+    path = event.get("path", "")
+    path_params = event.get("pathParameters") or {}
+
+    item_id = path_params.get("id")
+    body = parse_body(event)
+
+    try:
+
+        ########################################
+        # GET ALL ITEMS
+        ########################################
+        if method == "GET" and path == "/items":
+            result = get_all_items()
+            return response(200, result)
+
+        ########################################
+        # BATCH CREATE
+        ########################################
+        if method == "POST" and path == "/items":
+            items = body.get("items", [])
+            result = batch_create_items(items)
+            return response(201, result)
+
+        ########################################
+        # CREATE SINGLE ITEM
+        ########################################
+        if method == "POST" and path == "/item":
+            if "id" not in body:
+                return response(400, {"error": "Missing id in request body"})
+
+            result = create_item(body)
+            return response(201, result)
+
+        ########################################
+        # GET SINGLE ITEM
+        ########################################
+        if method == "GET" and path.startswith("/item/"):
+            if not item_id:
+                return response(400, {"error": "Missing item id"})
+
+            result = get_item(item_id)
+            return response(200, result)
+
+        ########################################
+        # UPDATE ITEM
+        ########################################
+        if method == "PUT":
+            if not item_id:
+                return response(400, {"error": "Missing item id"})
+
+            result = update_item(item_id, body)
+            return response(200, result)
+
+        ########################################
+        # DELETE ITEM
+        ########################################
+        if method == "DELETE":
+            if not item_id:
+                return response(400, {"error": "Missing item id"})
+
+            result = delete_item(item_id)
+            return response(200, result)
+
+        ########################################
+        # FALLBACK
+        ########################################
+        return response(404, {"error": "Route not found"})
+
+    except Exception as e:
+        print("ERROR:", str(e))
+        return response(500, {"error": str(e)})
