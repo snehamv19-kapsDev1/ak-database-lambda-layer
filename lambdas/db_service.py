@@ -17,7 +17,7 @@ PREFIX = f"{ENV}-jsvm-database/{ENV}-{SERVICE}-table"
 def create_item(item):
     item_id = item["id"]
     key = f"{PREFIX}/{item_id}.json"
-
+    print("BUCKET " + BUCKET)
     s3.put_object(
         Bucket=BUCKET,
         Key=key,

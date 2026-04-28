@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: S3 JSON DB CRUD Service (Clean REST API + Lambda)
+Description: S3 JSON DB CRUD Service (Lambda + API Gateway + CloudWatch)
 
 Parameters:
   Environment:
@@ -15,15 +15,16 @@ Parameters:
   CodeKey:
     Type: String
 
+# =========================================================
+# IAM ROLE (LAMBDA)
+# =========================================================
 Resources:
 
-########################################
-# IAM ROLE
-########################################
   LambdaRole:
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Sub "${Environment}-${ServiceName}-lambda-role"
+
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -47,7 +48,7 @@ Resources:
                   - arn:aws:s3:::jsvm-database
                   - arn:aws:s3:::jsvm-database/*
 
-        - PolicyName: Logs
+        - PolicyName: CloudWatchLogs
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -58,13 +59,14 @@ Resources:
                   - logs:PutLogEvents
                 Resource: "*"
 
-########################################
-# LAMBDA
-########################################
+# =========================================================
+# LAMBDA FUNCTION
+# =========================================================
   CrudFunction:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: !Sub "${Environment}-${ServiceName}-crud"
+
       Runtime: python3.11
       Handler: lambda_handler.lambda_handler
       Role: !GetAtt LambdaRole.Arn
@@ -80,17 +82,17 @@ Resources:
           SERVICE: !Ref ServiceName
           BUCKET: jsvm-database
 
-########################################
+# =========================================================
 # API GATEWAY
-########################################
+# =========================================================
   Api:
     Type: AWS::ApiGateway::RestApi
     Properties:
       Name: !Sub "${Environment}-${ServiceName}-api"
 
-########################################
-# RESOURCES
-########################################
+# =========================================================
+# API RESOURCES
+# =========================================================
   ItemResource:
     Type: AWS::ApiGateway::Resource
     Properties:
@@ -112,9 +114,9 @@ Resources:
       ParentId: !GetAtt Api.RootResourceId
       PathPart: items
 
-########################################
-# METHODS
-########################################
+# =========================================================
+# API METHODS (LAMBDA PROXY)
+# =========================================================
   CreateItem:
     Type: AWS::ApiGateway::Method
     Properties:
@@ -187,9 +189,9 @@ Resources:
         IntegrationHttpMethod: POST
         Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CrudFunction.Arn}/invocations
 
-########################################
+# =========================================================
 # LAMBDA PERMISSION
-########################################
+# =========================================================
   LambdaPermission:
     Type: AWS::Lambda::Permission
     Properties:
@@ -197,9 +199,52 @@ Resources:
       FunctionName: !Ref CrudFunction
       Principal: apigateway.amazonaws.com
 
-########################################
-# DEPLOYMENT + STAGE (FIXED)
-########################################
+# =========================================================
+# CLOUDWATCH LOGGING (API GATEWAY)
+# =========================================================
+  ApiGatewayCloudWatchRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${Environment}-${ServiceName}-apigw-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: sts:AssumeRole
+
+      Policies:
+        - PolicyName: ApiGwLogs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogGroups
+                  - logs:DescribeLogStreams
+                Resource: "*"
+
+  ApiGatewayAccount:
+    Type: AWS::ApiGateway::Account
+    Properties:
+      CloudWatchRoleArn: !GetAtt ApiGatewayCloudWatchRole.Arn
+
+# =========================================================
+# LAMBDA LOG GROUP
+# =========================================================
+  LambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${Environment}-${ServiceName}-crud"
+      RetentionInDays: 7
+
+# =========================================================
+# DEPLOYMENT + STAGE
+# =========================================================
   Deployment:
     Type: AWS::ApiGateway::Deployment
     DependsOn:
@@ -219,9 +264,16 @@ Resources:
       RestApiId: !Ref Api
       DeploymentId: !Ref Deployment
 
-########################################
+      MethodSettings:
+        - ResourcePath: "/*"
+          HttpMethod: "*"
+          LoggingLevel: INFO
+          DataTraceEnabled: true
+          MetricsEnabled: true
+
+# =========================================================
 # OUTPUT
-########################################
+# =========================================================
 Outputs:
   ApiUrl:
     Value: !Sub "https://${Api}.execute-api.${AWS::Region}.amazonaws.com/prod"
