@@ -16,9 +16,10 @@ Parameters:
     Type: String
 
 Resources:
-  ########################################
-  # IAM ROLE
-  ########################################
+
+########################################
+# IAM ROLE
+########################################
   LambdaRole:
     Type: AWS::IAM::Role
     Properties:
@@ -36,7 +37,6 @@ Resources:
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
-
               - Effect: Allow
                 Action:
                   - s3:GetObject
@@ -58,9 +58,9 @@ Resources:
                   - logs:PutLogEvents
                 Resource: "*"
 
-  ########################################
-  # LAMBDA
-  ########################################
+########################################
+# LAMBDA
+########################################
   CrudFunction:
     Type: AWS::Lambda::Function
     Properties:
@@ -80,17 +80,17 @@ Resources:
           SERVICE: !Ref ServiceName
           BUCKET: jsvm-database
 
-  ########################################
-  # API GATEWAY (REST API)
-  ########################################
+########################################
+# API GATEWAY
+########################################
   Api:
     Type: AWS::ApiGateway::RestApi
     Properties:
       Name: !Sub "${Environment}-${ServiceName}-api"
 
-  ########################################
-  # RESOURCES
-  ########################################
+########################################
+# RESOURCES
+########################################
   ItemResource:
     Type: AWS::ApiGateway::Resource
     Properties:
@@ -112,10 +112,9 @@ Resources:
       ParentId: !GetAtt Api.RootResourceId
       PathPart: items
 
-  ########################################
-  # ITEM CRUD METHODS
-  ########################################
-
+########################################
+# METHODS
+########################################
   CreateItem:
     Type: AWS::ApiGateway::Method
     Properties:
@@ -126,8 +125,7 @@ Resources:
       Integration:
         Type: AWS_PROXY
         IntegrationHttpMethod: POST
-        Uri: !Sub >
-          arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CrudFunction.Arn}/invocations
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CrudFunction.Arn}/invocations
 
   GetItem:
     Type: AWS::ApiGateway::Method
@@ -139,8 +137,7 @@ Resources:
       Integration:
         Type: AWS_PROXY
         IntegrationHttpMethod: POST
-        Uri: !Sub >
-          arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CrudFunction.Arn}/invocations
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CrudFunction.Arn}/invocations
 
   UpdateItem:
     Type: AWS::ApiGateway::Method
@@ -152,8 +149,7 @@ Resources:
       Integration:
         Type: AWS_PROXY
         IntegrationHttpMethod: POST
-        Uri: !Sub >
-          arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CrudFunction.Arn}/invocations
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CrudFunction.Arn}/invocations
 
   DeleteItem:
     Type: AWS::ApiGateway::Method
@@ -165,12 +161,7 @@ Resources:
       Integration:
         Type: AWS_PROXY
         IntegrationHttpMethod: POST
-        Uri: !Sub >
-          arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CrudFunction.Arn}/invocations
-
-  ########################################
-  # ITEMS (BATCH + GET ALL)
-  ########################################
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CrudFunction.Arn}/invocations
 
   GetItems:
     Type: AWS::ApiGateway::Method
@@ -182,8 +173,7 @@ Resources:
       Integration:
         Type: AWS_PROXY
         IntegrationHttpMethod: POST
-        Uri: !Sub >
-          arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CrudFunction.Arn}/invocations
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CrudFunction.Arn}/invocations
 
   BatchCreateItems:
     Type: AWS::ApiGateway::Method
@@ -195,12 +185,11 @@ Resources:
       Integration:
         Type: AWS_PROXY
         IntegrationHttpMethod: POST
-        Uri: !Sub >
-          arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CrudFunction.Arn}/invocations
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CrudFunction.Arn}/invocations
 
-  ########################################
-  # LAMBDA PERMISSION
-  ########################################
+########################################
+# LAMBDA PERMISSION
+########################################
   LambdaPermission:
     Type: AWS::Lambda::Permission
     Properties:
@@ -208,27 +197,27 @@ Resources:
       FunctionName: !Ref CrudFunction
       Principal: apigateway.amazonaws.com
 
-  ########################################
-  # DEPLOYMENT
-  ########################################
-    Deployment:
-      Type: AWS::ApiGateway::Deployment
-      DependsOn:
-        - CreateItem
-        - GetItem
-        - UpdateItem
-        - DeleteItem
-        - GetItems
-        - BatchCreateItems
-      Properties:
-        RestApiId: !Ref Api
+########################################
+# DEPLOYMENT + STAGE (FIXED)
+########################################
+  Deployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - CreateItem
+      - GetItem
+      - UpdateItem
+      - DeleteItem
+      - GetItems
+      - BatchCreateItems
+    Properties:
+      RestApiId: !Ref Api
 
-    Stage:
-      Type: AWS::ApiGateway::Stage
-      Properties:
-        StageName: prod
-        RestApiId: !Ref Api
-        DeploymentId: !Ref Deployment
+  Stage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      StageName: prod
+      RestApiId: !Ref Api
+      DeploymentId: !Ref Deployment
 
 ########################################
 # OUTPUT
