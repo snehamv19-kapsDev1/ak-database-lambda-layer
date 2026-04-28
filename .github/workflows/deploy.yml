@@ -52,7 +52,8 @@ jobs:
       # ----------------------
       - name: Set Service Name
         run: |
-          SERVICE_NAME=$(echo "${GITHUB_REPOSITORY}" | cut -d'/' -f2)
+#          SERVICE_NAME=$(echo "${GITHUB_REPOSITORY}" | cut -d'/' -f2)
+          SERVICE_NAME= jsvm-database-service       
           echo "SERVICE_NAME=$SERVICE_NAME" >> $GITHUB_ENV
     
 
