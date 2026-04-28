@@ -1,21 +1,30 @@
 AWSTemplateFormatVersion: '2010-09-09'
+Description: S3 DB Service  (Single Bucket + Prefix Strategy)
 
 Parameters:
   BucketName:
     Type: String
+
   Environment:
+    Type: String
+    AllowedValues:
+      - dev
+      - test
+      - prod
+
+  ServiceName:
     Type: String
 
 Resources:
-  CrudBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Ref BucketName
 
-  CrudLambdaRole:
+  ########################################
+  # IAM ROLE FOR LAMBDA
+  ########################################
+  DBServiceLambdaRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: jsvm-database-s3-role
+      RoleName: !Sub "${ServiceName}-lambda-role-${Environment}"
+
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -25,11 +34,45 @@ Resources:
             Action: sts:AssumeRole
 
       Policies:
-        - PolicyName: S3Access
+
+        ########################################
+        # S3 ACCESS (PREFIX-SCOPED 🔥)
+        ########################################
+        - PolicyName: S3PrefixAccess
           PolicyDocument:
+            Version: "2012-10-17"
             Statement:
+
+              # Allow access ONLY inside env/service prefix
               - Effect: Allow
                 Action:
                   - s3:GetObject
                   - s3:PutObject
-                Resource: !Sub "arn:aws:s3:::${BucketName}/*"
+                Resource: !Sub "arn:aws:s3:::${BucketName}/${Environment}/${ServiceName}/*"
+
+              # Allow listing ONLY that prefix
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource: !Sub "arn:aws:s3:::${BucketName}"
+                Condition:
+                  StringLike:
+                    s3:prefix: !Sub "${Environment}/${ServiceName}/*"
+
+        ########################################
+        # CLOUDWATCH LOGS
+        ########################################
+        - PolicyName: CloudWatchLogs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "*"
+
+Outputs:
+  LambdaRoleArn:
+    Value: !GetAtt DBServiceLambdaRole.Arn

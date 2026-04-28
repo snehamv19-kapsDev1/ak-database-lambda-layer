@@ -107,12 +107,11 @@ jobs:
       # ----------------------
       - name: Deploy Infra
         run: |
-      - name: Deploy Infra
-        run: |
           aws cloudformation deploy \
             --template-file infra/service-infra-cft.yaml \
             --stack-name jsvm-database-${ENV}-${SERVICE_NAME} \
             --capabilities CAPABILITY_NAMED_IAM \
             --parameter-overrides \
               BucketName=$BUCKET\$ENV \
+              ServiceName=${SERVICE_NAME}
               Environment=$ENV

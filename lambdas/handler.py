@@ -4,7 +4,7 @@ from service import CrudService
 service = CrudService()
 
 def handler(event, context):
-    print("EVENT:", event)
+    print("in handler EVENT:", event)
 
     method = event.get("httpMethod")
     body = json.loads(event.get("body", "{}"))
