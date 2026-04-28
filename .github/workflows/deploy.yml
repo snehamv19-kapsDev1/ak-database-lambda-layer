@@ -96,6 +96,13 @@ jobs:
       
           echo "CODE_KEY=$CODE_KEY" >> $GITHUB_ENV
 
+      - name: Update Lambda Code (Direct Deploy)
+        run: |
+          aws lambda update-function-code \
+            --function-name ${ENV}-${SERVICE_NAME}-crud \
+            --s3-bucket $BUCKET \
+            --s3-key $CODE_KEY
+
       # ----------------------
       # DEPLOY CFN
       # ----------------------
