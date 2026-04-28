@@ -36,7 +36,6 @@ jobs:
         run: |
           echo "Branch: $GITHUB_REF_NAME"
           echo "ENV: $ENV"
-          cat config/env-config.json
 
       # ----------------------
       # AWS AUTH
@@ -49,40 +48,30 @@ jobs:
           aws-region: us-west-2
 
       # ----------------------
+      # SET SERVICE_NAME from GITHUB_REPOSITORY name
+      # ----------------------
+      - name: Set Service Name
+        run: |
+          SERVICE_NAME=$(echo "${GITHUB_REPOSITORY}" | cut -d'/' -f2)
+          echo "SERVICE_NAME=$SERVICE_NAME" >> $GITHUB_ENV
+    
+
+      # ----------------------
       # LOAD CONFIG from SSM
       # ----------------------
-#      - name: Load config
-#        run: |
-#          set -e
-#
-#          SERVICE_NAME=$(jq -r ".service.name" config/env-config.json)
-#          BUCKET=$(jq -r ".environments[\"$ENV\"].s3_bucket" config/env-config.json)
-#
-#          if [ -z "$SERVICE_NAME" ] || [ "$SERVICE_NAME" == "null" ]; then
-#            echo "❌ SERVICE_NAME missing"
-#            exit 1
-#          fi
-#
-#          if [ -z "$BUCKET" ] || [ "$BUCKET" == "null" ]; then
-#            echo "❌ BUCKET missing for ENV=$ENV"
-#            exit 1
-#          fi
-#
-#          echo "SERVICE_NAME=$SERVICE_NAME" >> $GITHUB_ENV
-#          echo "BUCKET=$BUCKET" >> $GITHUB_ENV
-#
-#          echo "✅ SERVICE_NAME=$SERVICE_NAME"
-#          echo "✅ BUCKET=$BUCKET"
-
       - name: Load Infra Config from SSM
         run: |
+          set -e
           BUCKET=$(aws ssm get-parameter \
             --name "/jsvm/${ENV}/code-bucket" \
             --query "Parameter.Value" \
             --output text)
-          
-          SERVICE_NAME=$(echo "${GITHUB_REPOSITORY}" | cut -d'/' -f2)
-          echo "✅ SERVICE_NAME=$SERVICE_NAME"
+      
+          if [ -z "$BUCKET" ] || [ "$BUCKET" == "None" ]; then
+            echo "❌ SSM bucket not found"
+            exit 1
+          fi
+      
           echo "BUCKET=$BUCKET" >> $GITHUB_ENV
     
 
@@ -97,39 +86,38 @@ jobs:
           zip -r ../build/${SERVICE_NAME}-artifact.zip . > /dev/null
           cd ..
 
-      # ----------------------
-      # UPLOAD TO S3
-      # ----------------------
-#      - name: Upload Lambda
-#        run: |
-#          CODE_KEY="$ENV/${SERVICE_NAME}-db-artifact.zip"
-#
-#          echo "Uploading to s3://$BUCKET/$CODE_KEY"
-#
-#          aws s3 cp \
-#            build/${SERVICE_NAME}-db-artifact.zip \
-#            s3://$BUCKET/$CODE_KEY
-#
-#          echo "CODE_KEY=$CODE_KEY" >> $GITHUB_ENV
-
       - name: Upload Lambda Zip
         run: |
-          ZIP_KEY="${ENV}/${SERVICE_NAME}-artifact.zip"
+          CODE_KEY="${ENV}/${SERVICE_NAME}-artifact.zip"
       
-          aws s3 cp build/${SERVICE_NAME}-artifact.zip s3://$BUCKET/$ZIP_KEY
+          aws s3 cp \
+            build/${SERVICE_NAME}-artifact.zip \
+            s3://$BUCKET/$CODE_KEY
       
-          echo "CODE_KEY=$ZIP_KEY" >> $GITHUB_ENV
-    
+          echo "CODE_KEY=$CODE_KEY" >> $GITHUB_ENV
 
       # ----------------------
       # DEPLOY CFN
       # ----------------------
       - name: Deploy Service
         run: |
+          STACK_NAME="jsvm-${ENV}-${SERVICE_NAME}"
+      
+          STACK_EXISTS=$(aws cloudformation describe-stacks \
+            --stack-name "$STACK_NAME" \
+            2>/dev/null || echo "NO")
+      
+          if [[ "$STACK_EXISTS" == "NO" ]]; then
+            echo "🆕 Creating stack: $STACK_NAME"
+          else
+            echo "🔁 Updating stack: $STACK_NAME"
+          fi
+      
           aws cloudformation deploy \
             --template-file infra/service-infra-cft.yaml \
-            --stack-name jsvm-${ENV}-${SERVICE_NAME} \
+            --stack-name $STACK_NAME \
             --capabilities CAPABILITY_NAMED_IAM \
+            --no-fail-on-empty-changeset \
             --parameter-overrides \
               ServiceName=${SERVICE_NAME} \
               Environment=${ENV} \
@@ -141,17 +129,23 @@ jobs:
       # ----------------------
       - name: Get API URL
         run: |
+          set -e
+      
           API_URL=$(aws cloudformation describe-stacks \
-            --stack-name jsvm-database-${ENV}-${SERVICE_NAME} \
+            --stack-name jsvm-${ENV}-${SERVICE_NAME} \
             --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" \
             --output text)
-
+      
+          if [ "$API_URL" == "None" ] || [ -z "$API_URL" ]; then
+            echo "❌ API URL not found"
+            exit 1
+          fi
+      
           echo "🚀 API URL: $API_URL"
 
       - name: Publish Stack Outputs
         run: |
-          STACK_NAME="jsvm-database-${ENV}-${SERVICE_NAME}"
-
+          STACK_NAME="jsvm-${ENV}-${SERVICE_NAME}"
           OUTPUTS=$(aws cloudformation describe-stacks \
             --stack-name $STACK_NAME \
             --query "Stacks[0].Outputs" \
