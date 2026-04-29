@@ -109,17 +109,17 @@ jobs:
       - name: Deploy Service
         run: |
           STACK_NAME="jsvm-${ENV}-${SERVICE_NAME}"
-      
-          STACK_EXISTS=$(aws cloudformation describe-stacks \
-            --stack-name "$STACK_NAME" \
-            2>/dev/null || echo "NO")
-      
-          if [[ "$STACK_EXISTS" == "NO" ]]; then
-            echo "🆕 Creating stack: $STACK_NAME"
-          else
-            echo "🔁 Updating stack: $STACK_NAME"
-          fi
-      
+#
+#          STACK_EXISTS=$(aws cloudformation describe-stacks \
+#            --stack-name "$STACK_NAME" \
+#            2>/dev/null || echo "NO")
+#
+#          if [[ "$STACK_EXISTS" == "NO" ]]; then
+#            echo "🆕 Creating stack: $STACK_NAME"
+#          else
+#            echo "🔁 Updating stack: $STACK_NAME"
+#          fi
+#
           aws cloudformation deploy \
             --template-file infra/service-infra-cft.yaml \
             --stack-name $STACK_NAME \

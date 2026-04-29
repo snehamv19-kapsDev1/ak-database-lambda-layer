@@ -18,9 +18,9 @@ Parameters:
 Resources:
 
 # =========================================================
-# IAM ROLE (LAMBDA)
+# IAM ROLE (LAMBDA) - Done
 # =========================================================
-  LambdaRole:
+  LambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Sub "${Environment}-${ServiceName}-lambda-role"
@@ -52,15 +52,25 @@ Resources:
                 Resource: "*"
 
 # =========================================================
-# LAMBDA
+# LOG GROUP
 # =========================================================
-  CrudFunction:
+  LambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${Environment}-${ServiceName}-lambda"
+      RetentionInDays: 14
+
+# =========================================================
+# LAMBDA - Done
+# =========================================================
+  DatabaseServiceFunction:
     Type: AWS::Lambda::Function
+    DependsOn: LambdaLogGroup
     Properties:
       FunctionName: !Sub "${Environment}-${ServiceName}-crud"
       Runtime: python3.11
       Handler: lambda_handler.lambda_handler
-      Role: !GetAtt LambdaRole.Arn
+      Role: !GetAtt LambdaExecutionRole.Arn
       Timeout: 20
 
       Code:
@@ -76,7 +86,7 @@ Resources:
 # =========================================================
 # API GATEWAY
 # =========================================================
-  Api:
+  DatabaseServiceEndpoint:
     Type: AWS::ApiGateway::RestApi
     Properties:
       Name: !Sub "${Environment}-${ServiceName}-api"
@@ -87,21 +97,21 @@ Resources:
   Item:
     Type: AWS::ApiGateway::Resource
     Properties:
-      RestApiId: !Ref Api
+      RestApiId: !Ref DatabaseServiceEndpoint
       ParentId: !GetAtt Api.RootResourceId
       PathPart: item
 
   ItemId:
     Type: AWS::ApiGateway::Resource
     Properties:
-      RestApiId: !Ref Api
+      RestApiId: !Ref DatabaseServiceEndpoint
       ParentId: !Ref Item
       PathPart: "{id}"
 
   Items:
     Type: AWS::ApiGateway::Resource
     Properties:
-      RestApiId: !Ref Api
+      RestApiId: !Ref DatabaseServiceEndpoint
       ParentId: !GetAtt Api.RootResourceId
       PathPart: items
 
@@ -111,121 +121,75 @@ Resources:
   CreateItem:
     Type: AWS::ApiGateway::Method
     Properties:
-      RestApiId: !Ref Api
+      RestApiId: !Ref DatabaseServiceEndpoint
       ResourceId: !Ref Item
       HttpMethod: POST
       AuthorizationType: NONE
       Integration:
         Type: AWS_PROXY
         IntegrationHttpMethod: POST
-        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CrudFunction.Arn}/invocations
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DatabaseServiceFunction.Arn}/invocations
 
   GetItem:
     Type: AWS::ApiGateway::Method
     Properties:
-      RestApiId: !Ref Api
+      RestApiId: !Ref DatabaseServiceEndpoint
       ResourceId: !Ref ItemId
       HttpMethod: GET
       AuthorizationType: NONE
       Integration:
         Type: AWS_PROXY
         IntegrationHttpMethod: POST
-        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CrudFunction.Arn}/invocations
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DatabaseServiceFunction.Arn}/invocations
 
   UpdateItem:
     Type: AWS::ApiGateway::Method
     Properties:
-      RestApiId: !Ref Api
+      RestApiId: !Ref DatabaseServiceEndpoint
       ResourceId: !Ref ItemId
       HttpMethod: PUT
       AuthorizationType: NONE
       Integration:
         Type: AWS_PROXY
         IntegrationHttpMethod: POST
-        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CrudFunction.Arn}/invocations
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DatabaseServiceFunction.Arn}/invocations
 
   DeleteItem:
     Type: AWS::ApiGateway::Method
     Properties:
-      RestApiId: !Ref Api
+      RestApiId: !Ref DatabaseServiceEndpoint
       ResourceId: !Ref ItemId
       HttpMethod: DELETE
       AuthorizationType: NONE
       Integration:
         Type: AWS_PROXY
         IntegrationHttpMethod: POST
-        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CrudFunction.Arn}/invocations
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DatabaseServiceFunction.Arn}/invocations
 
   GetItems:
     Type: AWS::ApiGateway::Method
     Properties:
-      RestApiId: !Ref Api
+      RestApiId: !Ref DatabaseServiceEndpoint
       ResourceId: !Ref Items
       HttpMethod: GET
       AuthorizationType: NONE
       Integration:
         Type: AWS_PROXY
         IntegrationHttpMethod: POST
-        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CrudFunction.Arn}/invocations
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DatabaseServiceFunction.Arn}/invocations
 
   BatchCreate:
     Type: AWS::ApiGateway::Method
     Properties:
-      RestApiId: !Ref Api
+      RestApiId: !Ref DatabaseServiceEndpoint
       ResourceId: !Ref Items
       HttpMethod: POST
       AuthorizationType: NONE
       Integration:
         Type: AWS_PROXY
         IntegrationHttpMethod: POST
-        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CrudFunction.Arn}/invocations
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DatabaseServiceFunction.Arn}/invocations
 
-# =========================================================
-# PERMISSION
-# =========================================================
-  LambdaPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !Ref CrudFunction
-      Principal: apigateway.amazonaws.com
-      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${Api}/*/*/*
-
-# =========================================================
-# API GW LOGGING
-# =========================================================
-  ApiGatewayRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: apigateway.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: ApiGwLogs
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action: logs:*
-                Resource: "*"
-
-  ApiAccount:
-    Type: AWS::ApiGateway::Account
-    Properties:
-      CloudWatchRoleArn: !GetAtt ApiGatewayRole.Arn
-
-# =========================================================
-# LOG GROUP
-# =========================================================
-  LambdaLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub "/aws/lambda/${Environment}-${ServiceName}-crud"
-      RetentionInDays: 7
 
 # =========================================================
 # DEPLOYMENT
@@ -246,7 +210,7 @@ Resources:
   Stage:
     Type: AWS::ApiGateway::Stage
     Properties:
-      StageName: prod
+      StageName: "${Environment}"
       RestApiId: !Ref Api
       DeploymentId: !Ref Deployment
       MethodSettings:
@@ -255,6 +219,45 @@ Resources:
           LoggingLevel: INFO
           MetricsEnabled: true
           DataTraceEnabled: true
+
+# =========================================================
+# PERMISSION
+# =========================================================
+  LambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref DatabaseServiceFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${Api}/*/*/*
+
+# =========================================================
+# API GW LOGGING
+# =========================================================
+#  ApiGatewayRole:
+#    Type: AWS::IAM::Role
+#    Properties:
+#      AssumeRolePolicyDocument:
+#        Version: "2012-10-17"
+#        Statement:
+#          - Effect: Allow
+#            Principal:
+#              Service: apigateway.amazonaws.com
+#            Action: sts:AssumeRole
+#      Policies:
+#        - PolicyName: ApiGwLogs
+#          PolicyDocument:
+#            Version: "2012-10-17"
+#            Statement:
+#              - Effect: Allow
+#                Action: logs:*
+#                Resource: "*"
+#
+#  ApiAccount:
+#    Type: AWS::ApiGateway::Account
+#    Properties:
+#      CloudWatchRoleArn: !GetAtt ApiGatewayRole.Arn
+
 
 # =========================================================
 # OUTPUT
