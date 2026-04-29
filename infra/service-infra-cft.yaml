@@ -204,14 +204,14 @@ Resources:
       - GetItems
       - BatchCreate
     Properties:
-      RestApiId: !Ref Api
+      RestApiId: !Ref DatabaseServiceEndpoint
       Description: !Sub "${AWS::StackName}"
 
   Stage:
     Type: AWS::ApiGateway::Stage
     Properties:
       StageName: "${Environment}"
-      RestApiId: !Ref Api
+      RestApiId: !Ref DatabaseServiceEndpoint
       DeploymentId: !Ref Deployment
       MethodSettings:
         - ResourcePath: "/*"
