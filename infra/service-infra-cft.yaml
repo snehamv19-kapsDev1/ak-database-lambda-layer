@@ -98,7 +98,7 @@ Resources:
     Type: AWS::ApiGateway::Resource
     Properties:
       RestApiId: !Ref DatabaseServiceEndpoint
-      ParentId: !GetAtt Api.RootResourceId
+      ParentId: !GetAtt DatabaseServiceEndpoint.RootResourceId
       PathPart: item
 
   ItemId:
@@ -112,7 +112,7 @@ Resources:
     Type: AWS::ApiGateway::Resource
     Properties:
       RestApiId: !Ref DatabaseServiceEndpoint
-      ParentId: !GetAtt Api.RootResourceId
+      ParentId: !GetAtt DatabaseServiceEndpoint.RootResourceId
       PathPart: items
 
 # =========================================================
@@ -210,7 +210,7 @@ Resources:
   Stage:
     Type: AWS::ApiGateway::Stage
     Properties:
-      StageName: "${Environment}"
+      StageName: !Ref Environment
       RestApiId: !Ref DatabaseServiceEndpoint
       DeploymentId: !Ref Deployment
       MethodSettings:
@@ -264,4 +264,4 @@ Resources:
 # =========================================================
 Outputs:
   ApiUrl:
-    Value: !Sub "https://${Api}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
+    Value: !Sub "https://${DatabaseServiceEndpoint}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
