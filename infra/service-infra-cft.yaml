@@ -71,7 +71,7 @@ Resources:
         Variables:
           ENV: !Ref Environment
           SERVICE: !Ref ServiceName
-          BUCKET: jsvm-database
+          BUCKET: !Ref CodeBucket
 
 # =========================================================
 # API GATEWAY
