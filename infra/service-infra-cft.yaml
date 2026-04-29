@@ -232,34 +232,6 @@ Resources:
       SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${DatabaseServiceEndpoint}/*/*/*
 
 # =========================================================
-# API GW LOGGING
-# =========================================================
-#  ApiGatewayRole:
-#    Type: AWS::IAM::Role
-#    Properties:
-#      AssumeRolePolicyDocument:
-#        Version: "2012-10-17"
-#        Statement:
-#          - Effect: Allow
-#            Principal:
-#              Service: apigateway.amazonaws.com
-#            Action: sts:AssumeRole
-#      Policies:
-#        - PolicyName: ApiGwLogs
-#          PolicyDocument:
-#            Version: "2012-10-17"
-#            Statement:
-#              - Effect: Allow
-#                Action: logs:*
-#                Resource: "*"
-#
-#  ApiAccount:
-#    Type: AWS::ApiGateway::Account
-#    Properties:
-#      CloudWatchRoleArn: !GetAtt ApiGatewayRole.Arn
-
-
-# =========================================================
 # OUTPUT
 # =========================================================
 Outputs:
