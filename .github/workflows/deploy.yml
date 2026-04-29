@@ -98,10 +98,24 @@ jobs:
 
       - name: Update Lambda Code (Direct Deploy)
         run: |
-          aws lambda update-function-code \
-            --function-name ${ENV}-${SERVICE_NAME}-crud \
-            --s3-bucket $BUCKET \
-            --s3-key $CODE_KEY
+          
+          aws lambda get-function --function-name ${ENV}-${SERVICE_NAME}-lambda >/dev/null 2>&1
+          
+          if [ $? -ne 0 ]; then
+            echo "Creating Lambda..."
+            aws lambda create-function \
+              --function-name ${ENV}-${SERVICE_NAME}-lambda \
+              --runtime python3.11 \
+              --role <ROLE_ARN> \
+              --handler lambda_handler.lambda_handler \
+              --code S3Bucket=$BUCKET,S3Key=$CODE_KEY
+          else
+            echo "Updating Lambda..."
+            aws lambda update-function-code \
+              --function-name ${ENV}-${SERVICE_NAME}-lambda \
+              --s3-bucket $BUCKET \
+              --s3-key $CODE_KEY
+          fi
 
       # ----------------------
       # DEPLOY CFN
