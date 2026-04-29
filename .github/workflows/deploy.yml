@@ -157,7 +157,7 @@ jobs:
             --stack-name $STACK_NAME \
             --query "Stacks[0].Outputs" \
             --output json)
-
+      
           echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Environment:** $ENV" >> $GITHUB_STEP_SUMMARY
@@ -165,5 +165,5 @@ jobs:
           echo "**Stack:** $STACK_NAME" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Outputs" >> $GITHUB_STEP_SUMMARY
-
+      
           echo "$OUTPUTS" | jq -r '.[] | "- \(.OutputKey): \(.OutputValue)"' >> $GITHUB_STEP_SUMMARY
